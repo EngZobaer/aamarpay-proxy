@@ -6,12 +6,10 @@ const app = express();
 app.use(cors());
 app.use(express.json());
 
-// ✅ Test route
 app.get("/", (req, res) => {
   res.send("✅ AamarPay Proxy is running!");
 });
 
-// ✅ Payment proxy endpoint
 app.post("/aamarpay", async (req, res) => {
   try {
     const response = await fetch("https://sandbox.aamarpay.com/jsonpost.php", {
@@ -21,9 +19,17 @@ app.post("/aamarpay", async (req, res) => {
     });
 
     const data = await response.json();
-    res.json(data);
-  } catch (error) {
-    res.status(500).json({ error: "Proxy Server Error", message: error.message });
+    console.log("🔸 AamarPay Response:", data);
+
+    // ✅ Ensure valid URL returned
+    if (data.payment_url) {
+      res.json({ result: true, payment_url: data.payment_url });
+    } else {
+      res.status(400).json({ result: false, error: data });
+    }
+  } catch (err) {
+    console.error("❌ Proxy Error:", err);
+    res.status(500).json({ result: false, error: err.message });
   }
 });
 
