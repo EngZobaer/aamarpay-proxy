@@ -1,35 +1,35 @@
-import express from "express";
-import cors from "cors";
-import fetch from "node-fetch";
+const express = require("express");
+const cors = require("cors");
+const fetch = require("node-fetch");
+const bodyParser = require("body-parser");
 
 const app = express();
-app.use(cors());
-app.use(express.json());
 
+// ✅ Allow CORS from anywhere
+app.use(cors());
+app.use(bodyParser.json());
+
+// ✅ Health Check Route
 app.get("/", (req, res) => {
   res.send("✅ AamarPay Proxy is running!");
 });
 
+// ✅ Proxy POST endpoint
 app.post("/aamarpay", async (req, res) => {
   try {
     const response = await fetch("https://sandbox.aamarpay.com/jsonpost.php", {
       method: "POST",
-      headers: { "Content-Type": "application/json" },
+      headers: {
+        "Content-Type": "application/json",
+      },
       body: JSON.stringify(req.body),
     });
 
     const data = await response.json();
-    console.log("🔸 AamarPay Response:", data);
-
-    // ✅ Ensure valid URL returned
-    if (data.payment_url) {
-      res.json({ result: true, payment_url: data.payment_url });
-    } else {
-      res.status(400).json({ result: false, error: data });
-    }
-  } catch (err) {
-    console.error("❌ Proxy Error:", err);
-    res.status(500).json({ result: false, error: err.message });
+    res.json(data);
+  } catch (error) {
+    console.error("Proxy Error:", error);
+    res.status(500).json({ error: "Proxy Failed", details: error.message });
   }
 });
 
