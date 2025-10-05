@@ -14,32 +14,23 @@ const SIGNATURE_KEY =
 const FRONTEND_BASE =
   process.env.FRONTEND_BASE || "https://fatwa-darul-hidayah.web.app";
 
-// ✅ FIXED: Stable explicit CORS configuration
+// ✅ Middleware (CORS + Body Parser)
 app.use(
   cors({
-    origin: [
-      "https://fatwa-darul-hidayah.web.app",
-      "http://localhost:5500",
-      "http://localhost:5173",
-      "http://127.0.0.1:5500",
-      "http://localhost:3000",
-    ],
+    origin: "*", // ✅ Allow all origins
     methods: ["GET", "POST", "OPTIONS"],
-    allowedHeaders: ["Content-Type", "Authorization"],
-    credentials: true,
+    allowedHeaders: ["Content-Type"],
   })
 );
-
-// ✅ Middleware for parsing
 app.use(express.json({ limit: "1mb" }));
 app.use(express.urlencoded({ extended: true, limit: "1mb" }));
 
-// 🔹 Health Check
+// ✅ Health Check
 app.get("/", (_req, res) =>
   res.status(200).send("✅ AamarPay Proxy is running perfectly.")
 );
 
-// 🔹 Payment Initialization
+// ✅ Payment Initialization
 app.post("/aamarpay", async (req, res) => {
   try {
     const payload = req.body || {};
@@ -85,15 +76,15 @@ app.post("/aamarpay", async (req, res) => {
   }
 });
 
-// 🔹 Build Redirect URL
+// ✅ Redirect URL Builder
 function buildRedirectUrl(kind, req) {
   const qp = req.query || {};
   const body = req.body || {};
 
-  // extract qid & tran_id safely
   const qid = qp.qid || body.qid || body.opt_a || body?.opt_a?.[0] || "";
   const tran_id =
     qp.tran_id ||
+    qp.mer_txnid ||
     body.tran_id ||
     body.mer_txnid ||
     body?.mer_txnid?.[0] ||
@@ -110,10 +101,11 @@ function buildRedirectUrl(kind, req) {
   if (qid) url.searchParams.set("qid", qid);
   if (tran_id) url.searchParams.set("tran_id", tran_id);
 
+  console.log(`➡️ Redirect to ${url.toString()}`);
   return url.toString();
 }
 
-// 🔹 Redirect Routes (for AamarPay callback)
+// ✅ Redirect Routes (success/fail/cancel)
 ["success", "fail", "cancel"].forEach((kind) => {
   app.all(`/redirect/${kind}`, (req, res) => {
     try {
@@ -123,7 +115,6 @@ function buildRedirectUrl(kind, req) {
 
       const to = buildRedirectUrl(kind, req);
       console.log(`➡️ Redirecting to: ${to}\n`);
-
       return res.redirect(302, to);
     } catch (err) {
       console.error(`❌ Redirect error (${kind}):`, err);
@@ -132,7 +123,7 @@ function buildRedirectUrl(kind, req) {
   });
 });
 
-// 🔹 Verify Transaction
+// ✅ Verify Transaction
 app.post("/aamarpay/verify", async (req, res) => {
   try {
     const { tran_id } = req.body || {};
@@ -167,7 +158,7 @@ app.post("/aamarpay/verify", async (req, res) => {
   }
 });
 
-// 🔹 Start Server
+// ✅ Start Server
 app.listen(PORT, () => {
   console.log(`🚀 AamarPay Proxy Live on port ${PORT}`);
   console.log(`   Mode: ${AAMARPAY_MODE}`);
