@@ -2,66 +2,44 @@ import express from "express";
 import cors from "cors";
 
 const app = express();
-
-// 🔹 Render sets a dynamic PORT via env
 const PORT = process.env.PORT || 10000;
 
-// 🔹 Safe mode
 const AAMARPAY_MODE = (process.env.AAMARPAY_MODE || "sandbox").toLowerCase();
 const STORE_ID = process.env.AAMARPAY_STORE_ID || "aamarpaytest";
 const SIGNATURE_KEY =
   process.env.AAMARPAY_SIGNATURE_KEY ||
   "dbb74894e82415a2f7ff0ec3a97e4183";
-const ALLOW_ORIGINS = (process.env.ALLOW_ORIGINS || "*")
-  .split(",")
-  .map((s) => s.trim())
-  .filter(Boolean);
 
-// ✅ FIX: Add express.json with error handling
+const FRONTEND_BASE =
+  process.env.FRONTEND_BASE || "https://fatwa-darul-hidayah.web.app";
+
+// parsers
 app.use(
   express.json({
     strict: true,
     limit: "1mb",
-    verify: (req, res, buf) => {
-      try {
-        JSON.parse(buf);
-      } catch {
-        throw new Error("❌ Invalid JSON format received");
-      }
-    },
   })
 );
-
+// ✅ AamarPay often POSTs as form-urlencoded
 app.use(
-  cors({
-    origin: (origin, cb) => {
-      if (ALLOW_ORIGINS.includes("*") || !origin) return cb(null, true);
-      return cb(null, ALLOW_ORIGINS.includes(origin));
-    },
+  express.urlencoded({
+    extended: true,
+    limit: "1mb",
   })
 );
 
-// Health Check
-app.get("/", (_req, res) => {
-  res.status(200).send("✅ AamarPay Proxy is running perfectly.");
-});
+app.use(cors({ origin: true }));
 
-// Payment Init
+app.get("/", (_req, res) =>
+  res.status(200).send("✅ AamarPay Proxy is running perfectly.")
+);
+
+// init payment
 app.post("/aamarpay", async (req, res) => {
   try {
     const payload = req.body || {};
-    if (!payload || typeof payload !== "object") {
-      return res.status(400).json({ error: "Invalid or empty JSON body" });
-    }
-
     const store_id = payload.store_id || STORE_ID;
     const signature_key = payload.signature_key || SIGNATURE_KEY;
-
-    if (!store_id || !signature_key) {
-      return res
-        .status(400)
-        .json({ error: "Missing AamarPay credentials (store/signature)" });
-    }
 
     const base =
       AAMARPAY_MODE === "live"
@@ -91,15 +69,47 @@ app.post("/aamarpay", async (req, res) => {
     console.error("❌ Proxy error:", err);
     return res
       .status(500)
-      .json({ error: "Proxy crashed", detail: String(err.message || err) });
+      .json({ error: "Proxy crashed", detail: String(err?.message || err) });
   }
 });
 
-// Verify Endpoint
+// ✅ Bridge redirects (work with GET or POST from AamarPay)
+function buildRedirectUrl(kind, req) {
+  const qp = req.query || {};
+  const body = req.body || {};
+
+  const qid =
+    qp.qid || body.qid || body.opt_a || body?.opt_a?.[0] || "";
+  const tran =
+    qp.tran_id || body.mer_txnid || body.tran_id || body?.mer_txnid?.[0] || "";
+
+  const map = {
+    success: "/payment/success",
+    fail: "/payment/fail",
+    cancel: "/payment/cancel",
+  };
+  const path = map[kind] || "/";
+
+  const url = new URL(path, FRONTEND_BASE);
+  if (qid) url.searchParams.set("qid", qid);
+  if (tran) url.searchParams.set("mer_txnid", tran);
+
+  return url.toString();
+}
+
+["success", "fail", "cancel"].forEach((kind) => {
+  app.all(`/redirect/${kind}`, (req, res) => {
+    const to = buildRedirectUrl(kind, req);
+    return res.redirect(302, to);
+  });
+});
+
+// verify
 app.post("/aamarpay/verify", async (req, res) => {
   try {
     const { tran_id } = req.body || {};
-    if (!tran_id) return res.status(400).json({ error: "tran_id required" });
+    if (!tran_id)
+      return res.status(400).json({ error: "tran_id required" });
 
     const base =
       AAMARPAY_MODE === "live"
@@ -114,18 +124,17 @@ app.post("/aamarpay/verify", async (req, res) => {
 
     const resp = await fetch(verifyUrl);
     const data = await resp.json().catch(() => ({}));
-
     return res.json(data);
   } catch (err) {
     console.error("❌ Verify error:", err);
     return res
       .status(500)
-      .json({ error: "Verify failed", detail: String(err.message || err) });
+      .json({ error: "Verify failed", detail: String(err?.message || err) });
   }
 });
 
-// Start Server
 app.listen(PORT, () => {
   console.log(`🚀 AamarPay Proxy Live on port ${PORT}`);
   console.log(`   Mode: ${AAMARPAY_MODE}`);
+  console.log(`   Frontend: ${FRONTEND_BASE}`);
 });
