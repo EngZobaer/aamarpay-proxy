@@ -4,6 +4,7 @@ import cors from "cors";
 const app = express();
 const PORT = process.env.PORT || 10000;
 
+// 🔹 Configuration
 const AAMARPAY_MODE = (process.env.AAMARPAY_MODE || "sandbox").toLowerCase();
 const STORE_ID = process.env.AAMARPAY_STORE_ID || "aamarpaytest";
 const SIGNATURE_KEY =
@@ -13,17 +14,17 @@ const SIGNATURE_KEY =
 const FRONTEND_BASE =
   process.env.FRONTEND_BASE || "https://fatwa-darul-hidayah.web.app";
 
-// ✅ Middleware
+// 🔹 Middleware
 app.use(cors({ origin: true }));
 app.use(express.json({ limit: "1mb" }));
 app.use(express.urlencoded({ extended: true, limit: "1mb" }));
 
-// ✅ Root Test
+// 🔹 Health Check
 app.get("/", (_req, res) =>
   res.status(200).send("✅ AamarPay Proxy is running perfectly.")
 );
 
-// ✅ Payment Initialization
+// 🔹 Payment Initialization
 app.post("/aamarpay", async (req, res) => {
   try {
     const payload = req.body || {};
@@ -37,6 +38,8 @@ app.post("/aamarpay", async (req, res) => {
 
     const body = { ...payload, store_id, signature_key, type: "json" };
 
+    console.log("🟢 Init Payment Payload:", body);
+
     const resp = await fetch(`${base}/jsonpost.php`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
@@ -44,14 +47,17 @@ app.post("/aamarpay", async (req, res) => {
     });
 
     const data = await resp.json().catch(() => ({}));
+    console.log("🔹 AamarPay Response:", data);
+
     const payment_url =
       data.payment_url || data.pay_url || data.redirect_url || data.url;
 
     if (!payment_url) {
-      console.error("❌ AamarPay response missing URL:", data);
-      return res
-        .status(400)
-        .json({ error: "No payment_url returned from AamarPay", raw: data });
+      console.error("❌ Missing payment_url in response:", data);
+      return res.status(400).json({
+        error: "No payment_url returned from AamarPay",
+        raw: data,
+      });
     }
 
     return res.json({ payment_url });
@@ -64,14 +70,13 @@ app.post("/aamarpay", async (req, res) => {
   }
 });
 
-// ✅ Redirect URL Builder
+// 🔹 Build Redirect URL
 function buildRedirectUrl(kind, req) {
   const qp = req.query || {};
   const body = req.body || {};
 
-  // 🔹 Extract qid and transaction id safely
-  const qid =
-    qp.qid || body.qid || body.opt_a || body?.opt_a?.[0] || "";
+  // extract qid & tran_id safely
+  const qid = qp.qid || body.qid || body.opt_a || body?.opt_a?.[0] || "";
   const tran_id =
     qp.tran_id ||
     body.tran_id ||
@@ -79,7 +84,6 @@ function buildRedirectUrl(kind, req) {
     body?.mer_txnid?.[0] ||
     "";
 
-  // 🔹 Map success/fail/cancel to Flutter routes
   const map = {
     success: "/payment/success",
     fail: "/payment/fail",
@@ -87,20 +91,24 @@ function buildRedirectUrl(kind, req) {
   };
   const path = map[kind] || "/";
 
-  // 🔹 Build full redirect URL
   const url = new URL(path, FRONTEND_BASE);
   if (qid) url.searchParams.set("qid", qid);
-  if (tran_id) url.searchParams.set("tran_id", tran_id); // 🟢 Fixed key name
+  if (tran_id) url.searchParams.set("tran_id", tran_id);
 
-  console.log(`➡️ Redirecting to: ${url.toString()}`);
   return url.toString();
 }
 
-// ✅ Redirect Routes for success/fail/cancel
+// 🔹 Redirect Routes (for AamarPay callback)
 ["success", "fail", "cancel"].forEach((kind) => {
   app.all(`/redirect/${kind}`, (req, res) => {
     try {
+      console.log(`\n🟢 Incoming Redirect [${kind.toUpperCase()}]`);
+      console.log("🔸 Query:", req.query);
+      console.log("🔸 Body:", req.body);
+
       const to = buildRedirectUrl(kind, req);
+      console.log(`➡️ Redirecting to: ${to}\n`);
+
       return res.redirect(302, to);
     } catch (err) {
       console.error(`❌ Redirect error (${kind}):`, err);
@@ -109,12 +117,13 @@ function buildRedirectUrl(kind, req) {
   });
 });
 
-// ✅ Verify Transaction
+// 🔹 Verify Transaction
 app.post("/aamarpay/verify", async (req, res) => {
   try {
     const { tran_id } = req.body || {};
-    if (!tran_id)
+    if (!tran_id) {
       return res.status(400).json({ error: "tran_id required" });
+    }
 
     const base =
       AAMARPAY_MODE === "live"
@@ -127,10 +136,12 @@ app.post("/aamarpay/verify", async (req, res) => {
       STORE_ID
     )}&signature_key=${encodeURIComponent(SIGNATURE_KEY)}&type=json`;
 
+    console.log("🔍 Verify URL:", verifyUrl);
+
     const resp = await fetch(verifyUrl);
     const data = await resp.json().catch(() => ({}));
-
     console.log("🔍 Verify Response:", data);
+
     return res.json(data);
   } catch (err) {
     console.error("❌ Verify error:", err);
@@ -141,7 +152,7 @@ app.post("/aamarpay/verify", async (req, res) => {
   }
 });
 
-// ✅ Start Server
+// 🔹 Start Server
 app.listen(PORT, () => {
   console.log(`🚀 AamarPay Proxy Live on port ${PORT}`);
   console.log(`   Mode: ${AAMARPAY_MODE}`);
