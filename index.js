@@ -14,8 +14,23 @@ const SIGNATURE_KEY =
 const FRONTEND_BASE =
   process.env.FRONTEND_BASE || "https://fatwa-darul-hidayah.web.app";
 
-// 🔹 Middleware
-app.use(cors({ origin: true }));
+// ✅ FIXED: Stable explicit CORS configuration
+app.use(
+  cors({
+    origin: [
+      "https://fatwa-darul-hidayah.web.app",
+      "http://localhost:5500",
+      "http://localhost:5173",
+      "http://127.0.0.1:5500",
+      "http://localhost:3000",
+    ],
+    methods: ["GET", "POST", "OPTIONS"],
+    allowedHeaders: ["Content-Type", "Authorization"],
+    credentials: true,
+  })
+);
+
+// ✅ Middleware for parsing
 app.use(express.json({ limit: "1mb" }));
 app.use(express.urlencoded({ extended: true, limit: "1mb" }));
 
