@@ -1,17 +1,8 @@
-/**
- * ✅ AamarPay Proxy Server
- * Works both sandbox and live.
- * No further edits required — plug & deploy.
- * Author: EngZobaer (maintained)
- */
-
 import express from "express";
 import cors from "cors";
 
 const app = express();
 const PORT = process.env.PORT || 5000;
-
-// Environment Config
 const AAMARPAY_MODE = (process.env.AAMARPAY_MODE || "sandbox").toLowerCase();
 const STORE_ID = process.env.AAMARPAY_STORE_ID || "aamarpaytest";
 const SIGNATURE_KEY =
@@ -22,7 +13,6 @@ const ALLOW_ORIGINS = (process.env.ALLOW_ORIGINS || "*")
   .map((s) => s.trim())
   .filter(Boolean);
 
-// Middleware
 app.use(express.json());
 app.use(
   cors({
@@ -33,7 +23,6 @@ app.use(
   })
 );
 
-// Health Route
 app.get("/", (_req, res) => {
   res
     .status(200)
@@ -41,12 +30,9 @@ app.get("/", (_req, res) => {
     .send("✅ AamarPay Proxy is running perfectly.");
 });
 
-// Main Payment Initiate Endpoint
 app.post("/aamarpay", async (req, res) => {
   try {
     const payload = req.body || {};
-
-    // Secure defaults
     const store_id = payload.store_id || STORE_ID;
     const signature_key = payload.signature_key || SIGNATURE_KEY;
 
@@ -89,7 +75,6 @@ app.post("/aamarpay", async (req, res) => {
   }
 });
 
-// Optional: Verify transaction
 app.post("/aamarpay/verify", async (req, res) => {
   try {
     const { tran_id } = req.body || {};
@@ -119,7 +104,6 @@ app.post("/aamarpay/verify", async (req, res) => {
   }
 });
 
-// Start Server
 app.listen(PORT, () => {
   console.log(`🚀 AamarPay Proxy Live on port ${PORT}`);
   console.log(`   Mode: ${AAMARPAY_MODE}`);
