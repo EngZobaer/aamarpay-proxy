@@ -2,7 +2,11 @@ import express from "express";
 import cors from "cors";
 
 const app = express();
-const PORT = process.env.PORT || 5000;
+
+// 🔹 Render sets a dynamic PORT via env
+const PORT = process.env.PORT || 10000;
+
+// 🔹 Safe mode
 const AAMARPAY_MODE = (process.env.AAMARPAY_MODE || "sandbox").toLowerCase();
 const STORE_ID = process.env.AAMARPAY_STORE_ID || "aamarpaytest";
 const SIGNATURE_KEY =
@@ -13,7 +17,21 @@ const ALLOW_ORIGINS = (process.env.ALLOW_ORIGINS || "*")
   .map((s) => s.trim())
   .filter(Boolean);
 
-app.use(express.json());
+// ✅ FIX: Add express.json with error handling
+app.use(
+  express.json({
+    strict: true,
+    limit: "1mb",
+    verify: (req, res, buf) => {
+      try {
+        JSON.parse(buf);
+      } catch {
+        throw new Error("❌ Invalid JSON format received");
+      }
+    },
+  })
+);
+
 app.use(
   cors({
     origin: (origin, cb) => {
@@ -23,16 +41,19 @@ app.use(
   })
 );
 
+// Health Check
 app.get("/", (_req, res) => {
-  res
-    .status(200)
-    .type("text/plain")
-    .send("✅ AamarPay Proxy is running perfectly.");
+  res.status(200).send("✅ AamarPay Proxy is running perfectly.");
 });
 
+// Payment Init
 app.post("/aamarpay", async (req, res) => {
   try {
     const payload = req.body || {};
+    if (!payload || typeof payload !== "object") {
+      return res.status(400).json({ error: "Invalid or empty JSON body" });
+    }
+
     const store_id = payload.store_id || STORE_ID;
     const signature_key = payload.signature_key || SIGNATURE_KEY;
 
@@ -47,7 +68,7 @@ app.post("/aamarpay", async (req, res) => {
         ? "https://secure.aamarpay.com"
         : "https://sandbox.aamarpay.com";
 
-    const body = { ...payload, store_id, signature_key };
+    const body = { ...payload, store_id, signature_key, type: "json" };
 
     const resp = await fetch(`${base}/jsonpost.php`, {
       method: "POST",
@@ -56,30 +77,29 @@ app.post("/aamarpay", async (req, res) => {
     });
 
     const data = await resp.json().catch(() => ({}));
-
     const payment_url =
       data.payment_url || data.pay_url || data.redirect_url || data.url;
 
-    if (!payment_url)
-      return res.status(400).json({
-        error: "No payment_url returned from AamarPay",
-        raw: data,
-      });
+    if (!payment_url) {
+      return res
+        .status(400)
+        .json({ error: "No payment_url returned from AamarPay", raw: data });
+    }
 
     return res.json({ payment_url });
   } catch (err) {
     console.error("❌ Proxy error:", err);
     return res
       .status(500)
-      .json({ error: "Internal proxy error", detail: String(err) });
+      .json({ error: "Proxy crashed", detail: String(err.message || err) });
   }
 });
 
+// Verify Endpoint
 app.post("/aamarpay/verify", async (req, res) => {
   try {
     const { tran_id } = req.body || {};
-    if (!tran_id)
-      return res.status(400).json({ error: "tran_id is required" });
+    if (!tran_id) return res.status(400).json({ error: "tran_id required" });
 
     const base =
       AAMARPAY_MODE === "live"
@@ -100,10 +120,11 @@ app.post("/aamarpay/verify", async (req, res) => {
     console.error("❌ Verify error:", err);
     return res
       .status(500)
-      .json({ error: "Verify endpoint failed", detail: String(err) });
+      .json({ error: "Verify failed", detail: String(err.message || err) });
   }
 });
 
+// Start Server
 app.listen(PORT, () => {
   console.log(`🚀 AamarPay Proxy Live on port ${PORT}`);
   console.log(`   Mode: ${AAMARPAY_MODE}`);
