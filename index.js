@@ -37,7 +37,7 @@ app.get("/", (_req, res) => {
   res.status(200).send("✅ AamarPay Proxy is running perfectly.");
 });
 
-// ✅ Init Payment
+// ✅ Init Payment (400 FIXED)
 app.post("/aamarpay", async (req, res) => {
   try {
     const payload = req.body || {};
@@ -53,14 +53,24 @@ app.post("/aamarpay", async (req, res) => {
 
     console.log("🟢 Init Payment Payload:", body);
 
+    // ✅ FIX: Send as form-urlencoded instead of JSON
     const resp = await fetch(`${base}/jsonpost.php`, {
       method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify(body),
+      headers: {
+        "Content-Type": "application/x-www-form-urlencoded",
+      },
+      body: new URLSearchParams(body).toString(),
     });
 
-    const data = await resp.json().catch(() => ({}));
-    console.log("🔹 AamarPay Response:", data);
+    const text = await resp.text();
+    console.log("🔹 Raw AamarPay Response:", text);
+
+    let data = {};
+    try {
+      data = JSON.parse(text);
+    } catch {
+      console.warn("⚠️ Response not JSON, trying fallback");
+    }
 
     const payment_url =
       data.payment_url || data.pay_url || data.redirect_url || data.url;
@@ -68,7 +78,7 @@ app.post("/aamarpay", async (req, res) => {
     if (!payment_url) {
       return res
         .status(400)
-        .json({ error: "No payment_url returned from AamarPay", raw: data });
+        .json({ error: "No payment_url returned from AamarPay", raw: text });
     }
 
     res.json({ payment_url });
