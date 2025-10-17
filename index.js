@@ -16,7 +16,7 @@ const SIGNATURE_KEY =
   process.env.AAMARPAY_SIGNATURE_KEY || "dbb74894e82415a2f7ff0ec3a97e4183";
 
 const FRONTEND_BASE =
-  process.env.FRONTEND_BASE || "https://fatwa-darul-hidayah.web.app";
+  process.env.FRONTEND_BASE || "https://fatwa-dhp.web.app/";
 
 const AAMARPAY_BASE =
   AAMARPAY_MODE === "live"
